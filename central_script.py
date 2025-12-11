@@ -504,8 +504,6 @@ def update_MoistThreshold():
     set_threshold = request.get_json()
     return jsonify({"Moisture senssor's threshold value updated to": set_threshold})
 
-
-
 @app.route("/set_mode", methods=['POST'])
 def set_mode():
     global current_movement_mode, stop_event
@@ -524,6 +522,55 @@ def set_mode():
     else:
         print("Invalid mode selected")
         return jsonify({"status": "Invalid mode selected"}), 400
+
+# GEAR CONTROL -----------------------------------------------------
+gear_command = 0    # Gear Command: 0(low), 1(mid), 2(high)
+
+# ROUTE: /gear_low - Change motor's gear to low
+@app.route("/gear_low", methods=['POST'])
+def gear_low():
+    global current_movement_mode
+
+    # Package command
+    gear_command = 0
+    command_string = f"{gear_command}"
+    
+    # Send to Reciever
+    if client.publish(MQTT_TOPIC_COMMAND, command_string):
+        return jsonify({"Publish Status": "Gear Command Sent"})
+    else:
+        return jsonify({"Publish Status": "Gear Command Failed"}), 400
+    
+# ROUTE: /gear_mid - Change motor's gear to medium
+@app.route("/gear_mid", methods=['POST'])
+def gear_mid():
+    global current_movement_mode
+
+    # Package command
+    gear_command = 1
+    command_string = f"{gear_command}"
+    
+    # Send to Reciever
+    if client.publish(MQTT_TOPIC_COMMAND, command_string):
+        return jsonify({"Publish Status": "Gear Command Sent"})
+    else:
+        return jsonify({"Publish Status": "Gear Command Failed"}), 400
+
+# ROUTE: /gear_low - Change motor's gear to high
+@app.route("/gear_high", methods=['POST'])
+def gear_high():
+    global current_movement_mode
+
+    # Package command
+    gear_command = 2
+    command_string = f"{gear_command}"
+    
+    # Send to Reciever
+    if client.publish(MQTT_TOPIC_COMMAND, command_string):
+        return jsonify({"Publish Status": "Gear Command Sent"})
+    else:
+        return jsonify({"Publish Status": "Gear Command Failed"}), 400
+# ------------------------------------------------------------------
 
 @app.route("/move_forward", methods=['POST'])
 def move_forward():

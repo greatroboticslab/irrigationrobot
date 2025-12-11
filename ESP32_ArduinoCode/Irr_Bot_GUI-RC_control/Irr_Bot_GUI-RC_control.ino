@@ -19,14 +19,36 @@ const char* MQTT_MOVE_CMD = "robot/control";
 const char* MQTT_RAIL_CMD = "robot/rail";
 const char* MQTT_PUMP_CMD = "robot/pump";
 
+/* Pin map reference:
+  1 - 32 LRev
+  2 - 33 RRev
+  3 - 23 Speed-H
+  4 - 22 Speed-L
+  5 - 21 Brake
+  6 - 21 Brake (shared)
+  7 - 18 Speed-H
+  8 - 19 Speed-L
+*/
 
-// RoboClaw setup
-RoboClaw roboclaw(&Serial2, 10000);  // Use Serial2 for communication with RoboClaw
+// DACs
+#define L_DAC      25
+#define R_DAC      26
 
-// RoboClaw addresses
-#define ROBOCLAW_ADDRESS_LEFT  0x80  // Address for the left motor's RoboClaw  = 128
-#define ROBOCLAW_ADDRESS_RIGHT 0x81  // Address for the right motor's RoboClaw = 129
-#define ROBOCLAW_ADDRESS_RAIL  0x82  // Address for the rail motor's RoboClaw  = 130
+// Control pins
+#define REV_LEFT   32
+#define REV_RIGHT  33
+#define SP_HIGH    23   
+#define SP_LOW     22   
+#define BRAKE      21
+
+// Voltage scaling for throttle
+const float Vmin    = 0.84;   // controller idle
+const float Vmax    = 3.30;   // limited by ESP32 DAC
+const float VdacMax = 3.30;
+
+// Variables
+int swap = 1;
+int count = 0;
 
 // IBussBM setup
 IBusBM ibus;
@@ -38,11 +60,6 @@ int readChannel(byte channelInput, int minLimit, int maxLimit, int defaultValue)
   if (ch < 100) return defaultValue;
   return map(ch, 1000, 2000, minLimit, maxLimit);
 }
-
-// Mapping constants
-#define STOP_COMMAND 64
-#define MAX_COMMAND 126
-#define MIN_COMMAND 0
 
 // Pump Controls
 #define PUMP_PIN 27
