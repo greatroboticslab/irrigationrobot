@@ -1,7 +1,7 @@
 #Front-end Code
 def get_html():
     html_content='''
-    <!DOCTYPE html>
+<!DOCTYPE html>
     <html>
     <head>
         <title>Autonomous Robot Control Dashboard</title>
@@ -373,6 +373,12 @@ def get_html():
                         </div>
                         <!-- Robot Movement Controls -->
                         <div class="control-group">
+                            <h3> Gear Speed</h3>
+                            <div class="button-group">
+                                <button onclick="lowGear()"> Low </button>
+                                <button onclick="midGear()"> Medium </button>
+                                <button onclick="highGear()"> High </button>
+                            </div>
                             <h3>Movement Controls</h3>
                             <div class="button-group">
                             <div class="key-container">
@@ -387,6 +393,7 @@ def get_html():
                                 <div></div>
                             </div>
                             </div>
+                            
                         </div>
                     </div>
                 </div>
@@ -521,6 +528,47 @@ def get_html():
                 .then(response => response.json())
                 .then(data => {
                     console.log('Robot moving right');
+                })
+                .catch(error => console.error('Error:', error));
+            }
+
+            /* ---------------------------------
+                This is the functions controlling 
+                the MOTOR'S THREE GEAR:
+
+                + --------------++-------------+
+                |  JS function  ||    Route    |
+                + --------------++-------------+
+                |   lowGear     ||  gear_low   |
+                |   midGear     ||  gear_mid   |
+                |   highGear    ||  gear_high  |
+                + --------------++-------------+
+            */
+
+
+            function lowGear() {
+                fetch('/gear_low', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Motor: Low Gear');
+                })
+                .catch(error => console.error('Error:', error));
+            }
+
+            function midGear() {
+                fetch('/gear_mid', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Motor: Mid Gear');
+                })
+                .catch(error => console.error('Error:', error));
+            }
+
+            function highGear() {
+                fetch('/gear_high', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Motor: High Gear');
                 })
                 .catch(error => console.error('Error:', error));
             }
