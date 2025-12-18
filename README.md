@@ -14,8 +14,6 @@ This is an autonomous irrigation robot for precision watering, monitoring, and b
 
 ## Hardware and Software Integration (Developer)
 
-For developer-focused integration details, wiring notes, message formats, and a project file tree see the `DEVELOPER.md` companion file. Below is a concise developer-focused summary to keep in `README` for quick access.
-
 ### Hardware Integration — Key Points
 
 - IMU (LSM9DS0 / LSM9DS1 / LSM6DSL + LIS3MDL)
@@ -23,7 +21,7 @@ For developer-focused integration details, wiring notes, message formats, and a 
 	- Test: run the IMU test harness to confirm orientation and sensor health.
 
 - GPS
-	- Interface: UART/USB-serial or `gpsd` on Linux. Configure `auto_navigation.py` to the correct device/socket.
+	- Interface: UART/USB-serial or `gpsd` on Linux. Configure `auto_navigation.py` for the correct device/socket.
 
 - Moisture Sensors
 	- Usually published via MQTT topic `moisture/data` from field nodes. Use ADC (ADS1115) for analog sensors.
