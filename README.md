@@ -1,10 +1,5 @@
 # Autonomous Irrigation Robot
-This is an autonomous irrigation robot for precision watering, monitoring, and basic field assistance. This file contains the information both to inform the user as well as the developers.
-
-## Features
-# Autonomous Irrigation Robot
-
-This repository contains the software and documentation for an autonomous irrigation robot designed for precision watering, monitoring, and basic field assistance.
+This is an autonomous irrigation robot for precision watering, monitoring, and basic field assistance. This file contains the information to inform both the user and the developers.
 
 ## Features
 - **Real-time Monitoring:** Live camera feed and sensor data visualization
@@ -102,12 +97,8 @@ irrigationrobot/
 
 ## Users: Controls & Images
 
-Add the two operator images to the `Images/` folder. Suggested filenames: `controller.jpg` (remote controller annotated) and `ui_screenshot.jpg` (web UI). They'll be displayed below for user guidance.
-
 ![Controller](Images/Control_Overview.png)
 
 ![Web UI](Images/GUI_control.png)
 
 ---
-
-If you'd prefer the full developer notes inline here instead of `DEVELOPER.md`, tell me and I will expand the Hardware and Software Integration section with the full content.
