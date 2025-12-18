@@ -104,9 +104,9 @@ irrigationrobot/
 
 Add the two operator images to the `Images/` folder. Suggested filenames: `controller.jpg` (remote controller annotated) and `ui_screenshot.jpg` (web UI). They'll be displayed below for user guidance.
 
-![Controller](Images/controller.jpg)
+![Controller](Images/Control_Overview.png)
 
-![Web UI](Images/ui_screenshot.jpg)
+![Web UI](Images/GUI_control.png)
 
 ---
 
