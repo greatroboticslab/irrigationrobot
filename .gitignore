@@ -1,0 +1,22 @@
+# caches / env / editor
+__pycache__/
+pychche/
+.venv/
+.vscode/
+
+# data
+moisture_data.csv
+
+# private keys and common key patterns
+file.txt
+file.text
+file.txt.pub
+file.text.pub
+id_*
+*.key
+*.pem
+*.ppk
+*.secret
+
+# or (if you want to ignore all text files)
+# *.txt

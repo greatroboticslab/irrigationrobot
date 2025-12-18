@@ -22,7 +22,7 @@ from flask import Flask, Response, jsonify, request, render_template_string, ren
 
 # ---------------- Internal Modules -----------------
 import IMU
-import GUI
+import USER_INTERFACE.GUI as GUI
 
 from face_tracking import face_tracking_process
 from auto_navigation import auto_navigation_process
@@ -34,6 +34,8 @@ MQTT_PORT   = 1883
 
 # -------------------- Channels ---------------------
 MQTT_TOPIC_COMMAND      = "robot/control"
+MQTT_GEAR_TOPIC_COMMAND = "robot/gear"
+
 MQTT_RAIL_TOPIC_COMMAND = "robot/rail"
 MQTT_TOPIC_DETECTIONS   = "robot/detections"
 MQTT_TOPIC_CAMERA       = "robot/camera"
@@ -523,6 +525,7 @@ def set_mode():
         print("Invalid mode selected")
         return jsonify({"status": "Invalid mode selected"}), 400
 
+# ==================================================================
 # GEAR CONTROL -----------------------------------------------------
 gear_command = 0    # Gear Command: 0(low), 1(mid), 2(high)
 
@@ -536,7 +539,7 @@ def gear_low():
     command_string = f"{gear_command}"
     
     # Send to Reciever
-    if client.publish(MQTT_TOPIC_COMMAND, command_string):
+    if client.publish(MQTT_GEAR_TOPIC_COMMAND, command_string):
         return jsonify({"Publish Status": "Gear Command Sent"})
     else:
         return jsonify({"Publish Status": "Gear Command Failed"}), 400
@@ -551,7 +554,7 @@ def gear_mid():
     command_string = f"{gear_command}"
     
     # Send to Reciever
-    if client.publish(MQTT_TOPIC_COMMAND, command_string):
+    if client.publish(MQTT_GEAR_TOPIC_COMMAND, command_string):
         return jsonify({"Publish Status": "Gear Command Sent"})
     else:
         return jsonify({"Publish Status": "Gear Command Failed"}), 400
@@ -566,23 +569,95 @@ def gear_high():
     command_string = f"{gear_command}"
     
     # Send to Reciever
-    if client.publish(MQTT_TOPIC_COMMAND, command_string):
+    if client.publish(MQTT_GEAR_TOPIC_COMMAND, command_string):
         return jsonify({"Publish Status": "Gear Command Sent"})
     else:
         return jsonify({"Publish Status": "Gear Command Failed"}), 400
 # ------------------------------------------------------------------
 
+# ==================================================================
+# MOVEMENT CONTROL -------------------------------------------------
+move_command = "P"    # move Command: FORWARD(D), BACKWARD(B), LEFT(L), RIGHT(R), STOP(P)
+
+# ROUTE: /move_forward - Change movement to forward
 @app.route("/move_forward", methods=['POST'])
 def move_forward():
     global current_movement_mode
     if current_movement_mode == 'basic_movement':
-        front_back_command = 126  # Max forward
-        side_side_command = 64    # Neutral steering
-        command_string = f"{front_back_command} {side_side_command}"
-        client.publish(MQTT_TOPIC_COMMAND, command_string)
-        return jsonify({"status": "Moving forward"})
+        # Package command
+        move_command = "D" 
+        
+        # Send to Reciever
+        if client.publish(MQTT_TOPIC_COMMAND, move_command):
+            return jsonify({"Publish Status": "Movement Command Sent"})
+        else:
+            return jsonify({"Publish Status": "Movement Command Failed"}), 400
     else:
         return jsonify({"status": "Cannot move in current mode"}), 400
+    
+# ROUTE: /move_backward - Change movement to backward
+@app.route("/move_backward", methods=['POST'])
+def move_backward():
+    global current_movement_mode
+    if current_movement_mode == 'basic_movement':
+        # Package command
+        move_command = "B" 
+        
+        # Send to Reciever
+        if client.publish(MQTT_TOPIC_COMMAND, move_command):
+            return jsonify({"Publish Status": "Movement Command Sent"})
+        else:
+            return jsonify({"Publish Status": "Movement Command Failed"}), 400
+    else:
+        return jsonify({"status": "Cannot move in current mode"}), 400
+
+# ROUTE: /move_left - Change movement to left
+@app.route("/move_left", methods=['POST'])
+def move_left():
+    global current_movement_mode
+    if current_movement_mode == 'basic_movement':
+        # Package command
+        move_command = "L" 
+        
+        # Send to Reciever
+        if client.publish(MQTT_TOPIC_COMMAND, move_command):
+            return jsonify({"Publish Status": "Movement Command Sent"})
+        else:
+            return jsonify({"Publish Status": "Movement Command Failed"}), 400
+    else:
+        return jsonify({"status": "Cannot move in current mode"}), 400
+
+# ROUTE: /move_right - Change movement to right
+@app.route("/move_right", methods=['POST'])
+def move_right():
+    global current_movement_mode
+    if current_movement_mode == 'basic_movement':
+        # Package command
+        move_command = "R" 
+        # Send to Reciever
+        if client.publish(MQTT_TOPIC_COMMAND, move_command):
+            return jsonify({"Publish Status": "Movement Command Sent"})
+        else:
+            return jsonify({"Publish Status": "Movement Command Failed"}), 400
+    else:
+        return jsonify({"status": "Cannot move in current mode"}), 400
+
+# ROUTE: /stop_robot - stop robot movement
+@app.route("/stop_robot", methods=['POST'])
+def stop_robot():
+    global current_movement_mode
+    if current_movement_mode == 'basic_movement':
+        # Package command
+        move_command = "P" 
+        # Send to Reciever
+        if client.publish(MQTT_TOPIC_COMMAND, move_command):
+            return jsonify({"Publish Status": "Movement Command Sent"})
+        else:
+            return jsonify({"Publish Status": "Movement Command Failed"}), 400
+    else:
+        return jsonify({"status": "Cannot move in current mode"}), 400
+# ------------------------------------------------------------------
+
     
 @app.route("/move_rail_forward", methods=['POST'])
 def move_rail_forward():
@@ -592,18 +667,6 @@ def move_rail_forward():
         command_string = f"{move_command}"
         client.publish(MQTT_RAIL_TOPIC_COMMAND, command_string)
         return jsonify({"status": "Moving rail forward"})
-    else:
-        return jsonify({"status": "Cannot move in current mode"}), 400
-
-@app.route("/move_backward", methods=['POST'])
-def move_backward():
-    global current_movement_mode
-    if current_movement_mode == 'basic_movement':
-        front_back_command = 0   # Max backward
-        side_side_command = 64    # Neutral steering
-        command_string = f"{front_back_command} {side_side_command}"
-        client.publish(MQTT_TOPIC_COMMAND, command_string)
-        return jsonify({"status": "Moving backward"})
     else:
         return jsonify({"status": "Cannot move in current mode"}), 400
 
@@ -617,42 +680,6 @@ def move_rail_backward():
         return jsonify({"status": "Moving rail backward"})
     else:
         return jsonify({"status": "Cannot move in current mode"}), 400
-
-@app.route("/move_left", methods=['POST'])
-def move_left():
-    global current_movement_mode
-    if current_movement_mode == 'basic_movement':
-        front_back_command = 64  # Stop
-        side_side_command = 126    # Max left
-        command_string = f"{front_back_command} {side_side_command}"
-        client.publish(MQTT_TOPIC_COMMAND, command_string)
-        return jsonify({"status": "Turning left"})
-    else:
-        return jsonify({"status": "Cannot move in current mode"}), 400
-
-@app.route("/move_right", methods=['POST'])
-def move_right():
-    global current_movement_mode
-    if current_movement_mode == 'basic_movement':
-        front_back_command = 64  # Stop
-        side_side_command = 0   # Max right
-        command_string = f"{front_back_command} {side_side_command}"
-        client.publish(MQTT_TOPIC_COMMAND, command_string)
-        return jsonify({"status": "Turning right"})
-    else:
-        return jsonify({"status": "Cannot move in current mode"}), 400
-
-@app.route("/stop_robot", methods=['POST'])
-def stop_robot():
-    global current_movement_mode
-    if current_movement_mode == 'basic_movement':
-        front_back_command = 64   # Stop
-        side_side_command = 64    # Neutral steering
-        command_string = f"{front_back_command} {side_side_command}"
-        client.publish(MQTT_TOPIC_COMMAND, command_string)
-        return jsonify({"status": "Robot stopped"})
-    else:
-        return jsonify({"status": "Cannot stop in current mode"}), 400
     
 @app.route("/stop_rail", methods=['POST'])
 def stop_rail():
