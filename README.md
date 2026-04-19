@@ -29,7 +29,7 @@ We utilize the ESP32 as the brain.
 - Recieving commands from either the remote control or the Web UI control.   
 - Relay proper protocol for both the pump and the motors
 ### 2.1 Pin Location & Description
-
+![esp32 current layout](/Images/IMG_3811.JPG)
 ### 2.2 Current Code & Test Code
 The current code is [`complete_v1`](./ESP32_ArduinoCode/complete_v1/complete_v1.ino). It is able to recieve information from a remote control and web user interface. Then provide proper functionality to motor and pump.
 
