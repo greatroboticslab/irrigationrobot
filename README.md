@@ -1,121 +1,69 @@
 # Autonomous Irrigation Robot
-This is an autonomous irrigation robot for precision watering, monitoring, and basic field assistance. This file contains the information to inform both the user and the developers.
+This project is a versatile, Wi-Fi-enabled agricultural robot designed for possible remote farming tasks. Its purpose is to mitigate tasks that could be automated. By combining robust hardware control with network-based communication, this mobile robot serves as a smart, scalable assistant for crop care and field maintenance.
 
-## Features
-- **Real-time Monitoring:** Live camera feed and sensor data visualization
-- **Smart Irrigation:** Moisture-based irrigation control with zone management
+At its core:
+ - An ESP32 module handles real-time hardware execution, driving the motors and navigating the physical environment.
+ - A Raspberry Pi that creates a web user interface to control the robot, collect data, and enable automated controls.
 
-### Operation Modes
-- **Manual Control:** Web dashboard or remote controller for manual movement and pump control
-- **Auto-Navigation:** GPS/IMU-based waypoint navigation with path following
-- **Face Tracking:** Computer-vision-based human detection and PID following
+## Table of Contents
+1. [New Additions](#1-new-additions)
+2. [ESP32 Implementation](#2-esp32-implementation)  
+	2.1 [Pin Location & Description](#21-pin-location--description)  
+	2.2 [Curent Code & Test Code](#22-current-code--test-code)
+3. [Raspberry Pi Implementation](#3-raspbery-pi-implementation)
+4. [User Usage](#4-user-usage)  
+	4.1 [Getting Started](#41-getting-started)  
+	4.2 [Remote Control Overview](#42-remote-control-overview)  
+	4.3 [Web Dashboard Overview](#43-web-dashboard-overview)  
 
----
 
-## Hardware and Software Integration (Developer)
+## 1. New Additions
+- Installed two new motors.
+	- Implemented the new motor code to [`complete_v1`](./ESP32_ArduinoCode/complete_v1/complete_v1.ino)
+	- Created test code
+		- All motor movements, brakes, and speed tests
+		- Remote control to motor connection
 
-### Hardware Integration — Key Points
+## 2. ESP32 Implementation
+We utilize the ESP32 as the brain.  
+- Recieving commands from either the remote control or the Web UI control.   
+- Relay proper protocol for both the pump and the motors
+### 2.1 Pin Location & Description
 
-- IMU (LSM9DS0 / LSM9DS1 / LSM6DSL + LIS3MDL)
-	- Interface: I2C (preferred) or SPI. Verify addresses in `IMU.py` / `LSM*.py`.
-	- Test: run the IMU test harness to confirm orientation and sensor health.
+### 2.2 Current Code & Test Code
+The current code is [`complete_v1`](./ESP32_ArduinoCode/complete_v1/complete_v1.ino). It is able to recieve information from a remote control and web user interface. Then provide proper functionality to motor and pump.
 
-- GPS
-	- Interface: UART/USB-serial or `gpsd` on Linux. Configure `auto_navigation.py` for the correct device/socket.
+For any necessary testing sometimes going to basics is the best.
+- The [`simple_motor_test`](/ESP32_ArduinoCode/simple_motor_test/simple_motor_test.ino), only cares about testing the motor, checking if its able to go forward, turn, and in reverser, as well as break.
+- The [`control_to_motor_test`](/ESP32_ArduinoCode/control_to_motor_test/control_to_motor_test.ino), we implement user control through a remote control. We test both motor and the pump, as well as the remote control receiver.
 
-- Moisture Sensors
-	- Usually published via MQTT topic `moisture/data` from field nodes. Use ADC (ADS1115) for analog sensors.
-	- Example payload: `{"zone":"A","value":345,"unit":"raw","timestamp":"2025-12-18T12:00:00Z"}`
 
-- Camera
-	- OpenCV-compatible (VideoCapture). For web streaming, use MJPEG/HLS or an ffmpeg pipeline.
+## 3. Raspbery Pi Implementation
+The Pi acts as another form of controlling the robot through a web interface. In addition to regular movement and pump activation, it also provide visual. Visual like GPS location and Camera display. We can also automate the process of certain operations.
 
-- Motors & Drivers
-	- Use motor drivers (TB6612, L298N, or similar) and isolate motor power with fuses; map PWM in `central_script.py`.
+- The raspberry pi is able to recieve moisture value from a said zone and activate the pump at the location when given a threshold value.
+- The Rasberry Pi is able to auto navigate given the proper coordinate
+- Next step: remembering a path. Given that we have an IMU and GPD modules we should be able to save path for the robot to follow as a patrol route to the zones.
 
-- Pump & Relay
-	- Drive via rated relay/driver and include flyback protection for inductive loads.
+## 4. User Usage
+### 4.1 Getting Started
 
-- Power & Safety
-	- Use common ground, separate high-current wiring, add fuses, and provide an accessible physical E-Stop.
+1. **Power On:** Ensure the robot is has its two batteries fully charged and powered on. The system will boot and connect to the network (WiFi/Ethernet).
+	- **TO-KNOW:** Since we install new motor they need a separate battery 
+2. **Access the Controls:** We can access the robot full operations in two ways either by using the **Remote Control** provided or the **Web Interface**.
+	- **Web Interface access:** Open a web browser and navigate to `http://<robot_ip>:5000` to access the web dashboard.
 
-### Software Integration — Key Points
-
-- Development environment
-	- Create a Python venv and install `requirements.txt`.
-		```bash
-		python -m venv .venv
-		.venv\Scripts\activate   # Windows
-		pip install -r requirements.txt
-		```
-
-- Configuration
-	- `central_script.py` holds server and MQTT settings. Consider moving to `config.py` or environment variables.
-
-- MQTT topics (examples)
-	- `moisture/data` — `{zone, value, timestamp}`
-	- `imu/data` — `{ax,ay,az,gx,gy,gz,mag,timestamp}`
-	- `robot/status` — `{mode,lat,lon,battery,errors}`
-	- `robot/control` — `{cmd: "move", direction: "forward", speed: 0.6}` or `{cmd: "pump", action: "on"}`
-
-- HTTP endpoints (examples in `central_script.py`)
-	- `GET /status` — current status
-	- `POST /control` — send command JSON
-	- `GET /logs` — download CSV logs
-
-- Logging
-	- Sensor data is logged to CSV (see `moisture_data.csv`). For production, consider log rotation or SQLite.
-
-### Project File Tree (quick reference)
-
-```
-irrigationrobot/
-├── central_script.py
-├── auto_navigation.py
-├── face_tracking.py
-├── GUI.py
-├── IMU.py
-├── LSM*.py
-├── README.md
-├── DEVELOPER.md
-├── requirements.txt
-├── moisture_data.csv
-├── USER_INTERFACE/
-│   ├── GUI.py
-│   └── test.html
-├── ESP32_ArduinoCode/
-│   ├── ESPNOW_sender_PUMP/
-│   └── test_irrV5/
-└── Images/
-		├── controller.jpg
-		└── ui_screenshot.jpg
-```
-
----
-
-## Users: Operating the Robot
-
-### Getting Started
-
-1. **Power On:** Ensure the robot is fully charged and powered on. The system will boot and connect to the network (WiFi/Ethernet).
-2. **Access the Interface:** Open a web browser and navigate to `http://<robot_ip>:5000` to access the web dashboard, or use the physical remote controller (if available).
-3. **Check Status:** The dashboard shows:
-   - **Robot Status:** Online/Offline, current battery level, and active mode
-   - **Location:** GPS coordinates and real-time position on an interactive map
-   - **Sensors:** Current moisture levels in each zone, IMU data (tilt, orientation), and any warnings
-
-### Control Overview
-
-#### Remote Controller (Physical)
+### 4.2 Remote Control Overview
 
 ![Controller Layout](Images/Control_Overview.png)
 
 - **Armed/Mode Switch:** Select operating mode (disarmed, manual, auto-nav, face-track)
 - **Movement Sticks:** Left stick for forward/backward; right stick for left/right turns
+- **Speed Control:** The motor has three gears this switch can travel to each of them
 - **Pump Control:** Dedicated pump on/off switch for manual irrigation
 - **Power Button:** Turn the robot on/off
 
-#### Web Dashboard (GUI)
+### 4.3 Web Dashboard Overview
 
 ![Web Dashboard](Images/GUI_control.png)
 
@@ -131,67 +79,15 @@ The web interface provides:
   - Speed selector (Low / Medium / High)
   - **STOP** button for immediate halt
 
-- **Gear Speed:** Adjust robot speed (Low for precise work, High for faster coverage)
-
-- **PID Tuning (Face Tracking Mode):**
-  - **Kp, Ki, Kd sliders:** Fine-tune how aggressively the robot follows a face
-  - Higher Kp = faster response; adjust if the robot oscillates or over-shoots
-
 - **Moisture & Irrigation:**
-  - **Zone A, B, C displays:** Show current soil moisture readings
+  - **Zone Moisture Value:** Show current soil moisture readings
   - **Threshold slider:** Set the soil moisture level at which to trigger automatic watering
   - **Pump controls:** Manual On/Off, or Auto (triggers when moisture drops below threshold)
-  - **Drip Line controls:** Forward/Backward/Stop to reposition the watering line
 
 - **Location Tracking (Map):**
   - Red pin shows robot's current GPS position
   - Click on the map to set waypoints for auto-navigation
   - Planned route is displayed before execution
 
-- **Emergency Controls:**
-  - **E-Stop (red button):** Immediately cuts power to motors and pump — use in emergencies
-  - **Resume (green button):** Re-enable motors after E-Stop
-
-### Operation Workflow
-
-#### Manual Operation (Basic Movement)
-1. Select **Basic Movement** mode
-2. Use arrow buttons or physical remote to drive
-3. Use **Pump On** to start watering; **Pump Off** to stop
-4. Monitor the live camera feed to see where the robot is heading
-
-#### Automated Irrigation (Auto-Navigation + Moisture Control)
-1. Select **Auto-Navigation** mode
-2. On the map, click to add waypoints (the robot will visit them in sequence)
-3. Set irrigation **Threshold** (e.g., 30% soil moisture) in the **Moisture** panel
-4. Set pump to **Auto** — the robot will water zones when moisture falls below threshold
-5. Press **Start** to begin the route; monitor progress on the map
-6. Robot will stop at each waypoint and check moisture levels
-
-#### Human Following (Face Tracking)
-1. Select **Face Tracking** mode
-2. Robot activates the camera and searches for a person's face
-3. Once detected (green box on camera feed), the robot automatically follows
-4. Adjust **PID parameters** if following is too slow or jerky
-5. Press **STOP** to halt; E-Stop for emergency cutoff
-
-### Safety Tips
-
-- **Always keep an eye on the robot** — supervise during initial operations
-- **Avoid obstacles:** The robot has limited obstacle detection; clear the path
-- **Check battery:** Monitor battery level on the dashboard; return robot to charge when below 20%
-- **Water responsibly:** Manual pump operation can waste water; use Auto mode for efficiency
-- **Emergency Stop:** The red **E-Stop** button is always available — use it if anything goes wrong
-- **Keep dry:** While the robot is water-resistant, avoid submersion; dry wet areas before extended storage
-
-### Troubleshooting (Users)
-
-| Issue | Solution |
-|-------|----------|
-| Robot not responding | Check power, WiFi connection, and reload the web page |
-| GPS signal lost | Move to open area away from buildings; check antenna connection |
-| Pump not spraying | Check water line is connected, not kinked; verify pump is not on E-Stop |
-| Slow movement | Reduce load, check battery level, or clean wheels |
-| Camera feed frozen | Refresh browser or restart the robot |
-
----
+- **Camera Display:**
+  - Show what the robot sees in front it.
