@@ -1,0 +1,313 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <HardwareSerial.h>
+#include <math.h>
+
+// --- Network and Serial Routing Assignments ---
+const char* WIFI_SSID         = "Linksys08736";    // 
+const char* WIFI_PASSWORD     = "kbygr7ycna";    // 
+const char* MQTT_BROKER       = "192.168.1.104"; // 
+const int   MQTT_PORT         = 1883;            // 
+
+#define RS485_RX2_PIN         18 // Conflict-free RX routing avoiding JTAG 
+#define RS485_TX2_PIN         19 // Conflict-free TX routing avoiding JTAG 
+#define RS485_RTS_PIN         5  // Flow-control pin for RS485 transceiver 
+#define PUMP_CTRL_PIN         4  // Pump control remapped from GPIO17 to prevent PSRAM crash 
+#define ESTOP_PIN             21 // Dedicated active-low system halt 
+
+// --- Modbus Address Definitions ---
+const uint8_t SLAVE_AXIS_1    = 1; // 
+const uint8_t SLAVE_AXIS_2    = 2; // 
+const uint8_t SLAVE_AXIS_3    = 3; // 
+
+// --- Delta Robot Geometry (mm) ---
+const double r_b = 150.0; 
+const double r_p = 50.0;  
+const double L   = 200.0; 
+const double l   = 400.0; 
+
+// --- Actuator Pulses Per Degree Conversion ---
+// 1000 PPR Encoder (4000 CPR) * 46.656 gearbox = 186,624 steps/rev 
+// 186,624 steps / 360 degrees = 518.4 steps/degree
+const double STEPS_PER_DEGREE = 518.4; 
+
+// --- Dynamic Variables Linked to System GUI ---
+double Kp                  = 0.5;      // Proportional Gain 
+double Ki                  = 0.0001;   // Integral Gain 
+double Kd                  = 0.25;     // Derivative Gain 
+double desiredFaceArea     = 5000.0;   // Target area for distance tracking 
+double centerOffset        = 0.0;      // Pixel alignment offset from center 
+
+// --- Global Operational State Variables ---
+bool isArmed               = false;    // Safety arming flag 
+double currentX            = 0.0;      
+double currentY            = 0.0;      
+double currentZ            = -250.0;   // Default Z coordinate for startup 
+
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
+HardwareSerial ModbusSerial(2);
+
+// Standard Modbus RTU CRC-16 Calculation
+uint16_t calculateCRC(const uint8_t* buffer, uint16_t length) {
+    uint16_t crc = 0xFFFF;
+    for (uint16_t pos = 0; pos < length; pos++) {
+        crc ^= (uint16_t)buffer[pos];
+        for (int i = 8; i!= 0; i--) {
+            if ((crc & 0x0001)!= 0) {
+                crc >>= 1;
+                crc ^= 0xA001;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    return crc;
+}
+
+// Low-level Frame Transmission over RS485 Bus
+void sendModbusFrame(uint8_t slaveID, uint8_t functionCode, uint16_t startAddress, uint16_t* registers, uint16_t registerCount) {
+    uint16_t dataSize = registerCount * 2;
+    uint16_t frameSize = 7 + dataSize;
+    uint8_t frame;
+
+    frame = slaveID;
+    frame = functionCode;
+    frame = (startAddress >> 8) & 0xFF;
+    frame = startAddress & 0xFF;
+    frame = (registerCount >> 8) & 0xFF;
+    frame = registerCount & 0xFF;
+    frame = dataSize & 0xFF;
+
+    for (uint16_t i = 0; i < registerCount; i++) {
+        frame[7 + (i * 2)]     = (registers[i] >> 8) & 0xFF;
+        frame[7 + (i * 2) + 1] = registers[i] & 0xFF;
+    }
+
+    uint16_t crc = calculateCRC(frame, frameSize - 2);
+    frame = crc & 0xFF;
+    frame = (crc >> 8) & 0xFF;
+
+    digitalWrite(RS485_RTS_PIN, HIGH); // Enable TX driver 
+    ModbusSerial.write(frame, frameSize);
+    ModbusSerial.flush();              // Wait for transmission to complete
+    digitalWrite(RS485_RTS_PIN, LOW);  // Return to RX mode 
+}
+
+// Modbus Function Code 06: Write Single Register 
+void writeModbusRegister(uint8_t slaveID, uint16_t regAddress, uint16_t value) {
+    uint8_t frame;
+    frame = slaveID;
+    frame = 0x06; 
+    frame = (regAddress >> 8) & 0xFF;
+    frame = regAddress & 0xFF;
+    frame = (value >> 8) & 0xFF;
+    frame = value & 0xFF;
+
+    uint16_t crc = calculateCRC(frame, 6);
+    frame = crc & 0xFF;
+    frame = (crc >> 8) & 0xFF;
+
+    digitalWrite(RS485_RTS_PIN, HIGH);
+    ModbusSerial.write(frame, 8);
+    ModbusSerial.flush();
+    digitalWrite(RS485_RTS_PIN, LOW);
+}
+
+// Configures Trajectory Path Parameters via Function Code 16 (0x10) 
+void setDriverTrajectory(uint8_t slaveID, int32_t stepPosition, uint16_t rpmSpeed, uint16_t accelTime, uint16_t decelTime) {
+    uint16_t parameters;
+    
+    // Set operation mode to Absolute Positioning 
+    parameters = 0x0001; 
+    
+    // Split 32-bit position into two 16-bit registers 
+    parameters = (stepPosition >> 16) & 0xFFFF; // High Word 
+    parameters = stepPosition & 0xFFFF;         // Low Word 
+    
+    parameters = rpmSpeed;  // Speed (RPM) 
+    parameters = accelTime; // Acceleration ramp (ms) 
+    parameters = decelTime; // Deceleration ramp (ms) 
+
+    // Write parameters sequentially starting at address 0x6200 
+    sendModbusFrame(slaveID, 0x10, 0x6200, parameters, 6);
+}
+
+// Analytical Solution of Inverse Kinematics for a Single Axis
+double solveInverseKinematics(double x0, double y0, double z0, double armAngleDegrees) {
+    double angleRad = armAngleDegrees * (M_PI / 180.0);
+    double r_diff = r_p - r_b;
+    
+    // Position of platform hinge point relative to motor base coordinate system
+    double x_p = x0 + r_diff * cos(angleRad);
+    double y_p = y0 + r_diff * sin(angleRad);
+    double z_p = z0;
+
+    // Projection onto local 2D coordinate plane
+    double u = x_p * cos(angleRad) + y_p * sin(angleRad);
+    double v = z_p;
+
+    // Solve quadratic coefficients E, F, and G
+    double E = -2.0 * L * u;
+    double F = 2.0 * L * v;
+    double G = u * u + v * v + L * L - l * l;
+
+    double discriminant = F * F - G * G + E * E;
+    if (discriminant < 0) {
+        return NAN; // Requested coordinate is outside the robot's physical envelope
+    }
+
+    // Select the negative root to enforce an elbow-down configuration 
+    double t = (-F - sqrt(discriminant)) / (G - E);
+    double theta = 2.0 * atan(t) * (180.0 / M_PI);
+
+    return theta;
+}
+
+// Coordinated Axis Motion Controller
+void executeCoordinatedMove(double x0, double y0, double z0) {
+    if (!isArmed) return; // Prevent movement if safety system is disarmed 
+
+    double theta1 = solveInverseKinematics(x0, y0, z0, 0.0);
+    double theta2 = solveInverseKinematics(x0, y0, z0, 120.0);
+    double theta3 = solveInverseKinematics(x0, y0, z0, 240.0);
+
+    // Block movement if any coordinates are mechanically invalid
+    if (isnan(theta1) || isnan(theta2) || isnan(theta3)) {
+        return; 
+    }
+
+    // Convert computed angular joint angles to steps 
+    int32_t targetSteps1 = (int32_t)(theta1 * STEPS_PER_DEGREE);
+    int32_t targetSteps2 = (int32_t)(theta2 * STEPS_PER_DEGREE);
+    int32_t targetSteps3 = (int32_t)(theta3 * STEPS_PER_DEGREE);
+
+    // Profile Configuration: 180 RPM speed, 40ms acceleration and deceleration curves
+    setDriverTrajectory(SLAVE_AXIS_1, targetSteps1, 180, 40, 40);
+    setDriverTrajectory(SLAVE_AXIS_2, targetSteps2, 180, 40, 40);
+    setDriverTrajectory(SLAVE_AXIS_3, targetSteps3, 180, 40, 40);
+
+    // Write execution command 0x0010 to Axis Trigger Registers 
+    writeModbusRegister(SLAVE_AXIS_1, 0x6002, 0x0010);
+    writeModbusRegister(SLAVE_AXIS_2, 0x6002, 0x0010);
+    writeModbusRegister(SLAVE_AXIS_3, 0x6002, 0x0010);
+
+    currentX = x0;
+    currentY = y0;
+    currentZ = z0;
+}
+
+// System Arming and Emergency Stop Interface
+void updateArmingState(bool armState) {
+    isArmed = armState; // 
+    if (isArmed) {
+        digitalWrite(ESTOP_PIN, HIGH); // Release driver Quick-Stop state
+    } else {
+        // Pull GPIO21 low to trigger hardwired driver emergency stops 
+        digitalWrite(ESTOP_PIN, LOW);  
+        digitalWrite(PUMP_CTRL_PIN, LOW); // Turn off the pump 
+    }
+}
+
+// MQTT Callback Handler 
+void onMqttMessage(char* topic, byte* payload, unsigned int length) {
+    char messageBuffer[length + 1];
+    memcpy(messageBuffer, payload, length);
+    messageBuffer[length] = '\0';
+
+    if (strcmp(topic, "robot/control") == 0) { // 
+        double tempX, tempY, tempZ;
+        if (sscanf(messageBuffer, "%lf %lf %lf", &tempX, &tempY, &tempZ) == 3) {
+            executeCoordinatedMove(tempX, tempY, tempZ);
+        } else if (strcmp(messageBuffer, "P") == 0) { // Emergency Stop Code 
+            updateArmingState(false);
+        }
+    } else if (strcmp(topic, "robot/pump") == 0) { // 
+        if (strcmp(messageBuffer, "1") == 0 && isArmed) {
+            digitalWrite(PUMP_CTRL_PIN, HIGH); // 
+        } else {
+            digitalWrite(PUMP_CTRL_PIN, LOW);  // 
+        }
+    } else if (strcmp(topic, "robot/arm") == 0) {
+        if (strcmp(messageBuffer, "1") == 0) {
+            updateArmingState(true);
+        } else {
+            updateArmingState(false);
+        }
+    } else if (strcmp(topic, "robot/pid") == 0) { // 
+        // Parse updated PID parameters from the GUI 
+        double pVal, iVal, dVal;
+        if (sscanf(messageBuffer, "%lf %lf %lf", &pVal, &iVal, &dVal) == 3) {
+            Kp = pVal; Ki = iVal; Kd = dVal; // 
+        }
+    } else if (strcmp(topic, "robot/vision") == 0) { // 
+        // Parse vision coordinates from camera tracking 
+        double areaVal, offsetVal;
+        if (sscanf(messageBuffer, "%lf %lf", &areaVal, &offsetVal) == 2) {
+            desiredFaceArea = areaVal; // 
+            centerOffset = offsetVal;   // 
+            
+            // Example PID Adjustment Loop
+            double error = centerOffset; // Keep tracking target centered
+            double correction = Kp * error; 
+            
+            // Adjust the delta robot coordinates dynamically based on the error
+            double newX = currentX + correction;
+            executeCoordinatedMove(newX, currentY, currentZ);
+        }
+    }
+}
+
+void connectToBroker() {
+    while (!mqttClient.connected()) {
+        if (mqttClient.connect("ESP32_DeltaRobot_Core")) {
+            mqttClient.subscribe("robot/control"); // 
+            mqttClient.subscribe("robot/pump");    // 
+            mqttClient.subscribe("robot/arm");
+            mqttClient.subscribe("robot/pid");     // 
+            mqttClient.subscribe("robot/vision");  // 
+        } else {
+            delay(5000);
+        }
+    }
+}
+
+void setup() {
+    // Configure safe GPIO pins, avoiding JTAG and PSRAM conflicts [5, 16]
+    pinMode(RS485_RTS_PIN, OUTPUT);
+    digitalWrite(RS485_RTS_PIN, LOW);
+    
+    pinMode(PUMP_CTRL_PIN, OUTPUT);
+    digitalWrite(PUMP_CTRL_PIN, LOW); // Safe default 
+
+    pinMode(ESTOP_PIN, OUTPUT);
+    digitalWrite(ESTOP_PIN, LOW); // Active-low stop 
+
+    // Hardware Serial 2 configuration for RS485 communication [7, 8, 14]
+    ModbusSerial.begin(115200, SERIAL_8N1, RS485_RX2_PIN, RS485_TX2_PIN);
+
+    // Initialize Network Interface 
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD); // 
+    while (WiFi.status()!= WL_CONNECTED) {
+        delay(500);
+    }
+
+    mqttClient.setServer(MQTT_BROKER, MQTT_PORT); // 
+    mqttClient.setCallback(onMqttMessage);        // 
+
+    // Pre-arm Driver Configuration via Modbus
+    for (uint8_t i = 1; i <= 3; i++) {
+        // Enable soft-limits on each driver 
+        writeModbusRegister(i, 0x6000, 0x0002); 
+    }
+
+    updateArmingState(false); // Start in a safe, disarmed state 
+}
+
+void loop() {
+    if (!mqttClient.connected()) {
+        connectToBroker(); // 
+    }
+    mqttClient.loop(); // 
+    delay(10); // Yield to prevent watchdog starvation and maintain network stack
+}
