@@ -330,7 +330,7 @@ void set3Speed(int gear_value) {
   if (gear_value == 0)     
     digitalWrite(SP_LOW, LOW);
 
-  if (gear == 50)
+  if (gear_value == 50)
     digitalWrite(SP_HIGH, LOW);
 
 }
