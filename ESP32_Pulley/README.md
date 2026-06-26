@@ -20,8 +20,6 @@ You will need an RS485 transceiver module (like a MAX485 or similar 3.3V module)
 
 ### 2. ESP32 Implementation (`Master_Controller.ino`)
 
-This code implements the communication layer and a helper function to execute the "Pick" sequence you described.
-
 ```cpp
 #include <ModbusMaster.h>
 
