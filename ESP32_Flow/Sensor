@@ -1,0 +1,60 @@
+#define FLOW_SENSOR_PIN 34  // Connect the flow sensor signal (usually yellow) to GPIO 34
+
+// Flow Sensor Variables
+volatile unsigned int pulseCount = 0; // 'volatile' ensures it updates correctly in the background
+float flowRate = 0.0;
+unsigned int flowMilliLitres = 0;
+unsigned long totalMilliLitres = 0;
+unsigned long oldTime = 0;
+
+// Calibration factor for the flow sensor 
+// (4.5 is standard for YF-S201; adjust if your readings are off)
+const float calibrationFactor = 4.5;
+// ISR for counting flow sensor pulses
+void IRAM_ATTR pulseCounter() {
+  pulseCount++;
+}
+// Initialize flow sensor
+pinMode(FLOW_SENSOR_PIN, INPUT_PULLUP);
+
+// Attach the interrupt to trigger on the falling edge of the pulse
+attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN), pulseCounter, FALLING);
+// --- FLOW SENSOR CALCULATION (Runs once per second) ---
+  if ((millis() - oldTime) > 1000) {
+    // Briefly pause interrupts to safely copy and reset the pulse count
+    noInterrupts();
+    unsigned int currentPulses = pulseCount;
+    pulseCount = 0;
+    interrupts();
+
+    // Calculate flow rate in Liters/minute
+    // Math: (Pulses per second) / CalibrationFactor
+    flowRate = ((1000.0 / (millis() - oldTime)) * currentPulses) / calibrationFactor;
+    
+    // Calculate volume in mL passed during this exact 1-second interval
+    flowMilliLitres = (flowRate / 60) * 1000;
+    
+    // Add to total volume
+    totalMilliLitres += flowMilliLitres;
+    
+    // Reset timer
+    oldTime = millis();
+
+    // Print to Serial Monitor for debugging
+    if (flowRate > 0) {
+      Serial.print("Flow Rate: ");
+      Serial.print(flowRate);
+      Serial.print(" L/min  |  Total Volume: ");
+      Serial.print(totalMilliLitres);
+      Serial.println(" mL");
+    }
+    
+    // Optional Safety Logic: Dry-Run Protection
+    // If the pump is commanded ON, but there is no flow, turn it off to prevent damage.
+    /*
+    if (digitalRead(PUMP_PIN) == HIGH && flowRate == 0) {
+       Serial.println("WARNING: Pump is running dry! Shutting down.");
+       digitalWrite(PUMP_PIN, LOW);
+    }
+    */
+  }
