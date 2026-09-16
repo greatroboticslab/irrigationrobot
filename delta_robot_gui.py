@@ -7,6 +7,8 @@ This unified interface features tabs for standard XYZ operations
 If you use the Debug tab to move motors individually, the robot's
 XYZ tracking becomes invalid. You must re-home the robot to restore
 kinematic XYZ moves.
+
+The Home Button Does NOT Work yet, if you press it during testing make sure you can disconnect the stepper drivers power.
 """
 
 import math
